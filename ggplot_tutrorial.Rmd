@@ -1,0 +1,317 @@
+---
+title: "Basic ggplot tutorial"
+author: "Rosana Zenil-Ferguson"
+date: "2023-06-28"
+output: html_document
+---
+## Open a Project
+
+Go to File-> New Project -> New directory->New project, make sure you put it in the Desktop (so it is easy to find) and name your project "andean_tutorials". The projects allow us to keep all our files in one place.
+
+## Packages
+
+Packages are groups of different functions or "actions" that allows us to do special tasks. People write packages to help others with reproducibility of analyses.
+
+```{r echo=TRUE, eval=FALSE}
+install.packages("tidyr") # this works with large sets of data
+install.packages("readxl") # this works with reading excel sheets
+install.packages("ggplot2") # this is our superstar today we are making plots
+install.packages("dplyr") # this helps us organize datasets quickly and effectively
+```
+
+It is not sufficient with installing the packages we have to load them in our "environment" (it is like bringing a pen if you are plannint to write, not only buying it!). To load them we use the function ``library()`` 
+
+
+```{r echo=TRUE}
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(dplyr) 
+```
+
+
+
+## Reading the data
+The function ``read_xlsx`` allows us to read excel files. So let's go ahead and read the dataset of the paper of Onstein et al. *Which frugivory‐related traits facilitated historical long‐distance dispersal in the custard apple family (Annonaceae)?.* Journal of Biogeography. 2019. 46(8):1874-88.
+
+```{r echo=TRUE}
+onstein <- read_xlsx('~/Dropbox/AndeanWorkshop/Onstein_data.xlsx',
+                     sheet = 'Matrix for analysis')
+
+## Check what is inside the dataset, was it read fine?
+head(onstein)
+```
+
+Now we are going to check what is in one variable called ``Log_Fruit_length_avg``
+```{r echo=TRUE}
+## Check how it was read, is it a column with numbers (aka a quantitative variable?)
+head(onstein$Log_Fruit_length_avg)
+ #good practice, what data am I missing, what values are there?
+## Make it a quantitative variable that we can work with
+onstein$Log_Fruit_length_avg <- as.numeric(onstein$Log_Fruit_length_avg)
+head(is.na(onstein$Log_Fruit_length_avg))
+```
+
+Turns out ``Log_Fruit_length_avg``  is a log-transformed column and that makes scale weird (later we will discuss why sometimes we have to log variables). Let's put it back in the original scale.
+
+```{r echo=TRUE}
+## put it back in regular scale
+
+fruit_length_average= exp(onstein$Log_Fruit_length_avg)
+
+## Add it to your dataset- Here discuss why it is really good to "add here" instead of modifying your original data.
+## Reproducibility practices
+onstein<-cbind(onstein, fruit_length_average)
+head(onstein)
+```
+
+# Plotting and understanding our data
+
+## Histograms
+
+What are histograms? They are one of the most useful tools for **continuous traits**. They group observations in bins (or cajitas) to show us what is more frequent.
+
+Let's make a basic histogram!
+```{r echo=TRUE}
+ggplot(onstein, aes(x=fruit_length_average)) + geom_histogram()
+```
+
+Let's interpret it!
+### Making histograms pretty and more useful
+
+Changing colors in and out and saving it
+```{r echo=TRUE}
+p_histogram<- ggplot(onstein, aes(x=fruit_length_average))+ geom_histogram(color="darkblue", fill="hotpink")
+p_histogram
+```
+
+What if we want to separate the data by the type of plant? and we have a variable ``Shrub`` in the dataset that tells us which one is a shrub or not a shrub
+
+```{r echo=TRUE}
+p_histogram<-ggplot(onstein, aes(x=fruit_length_average, color=Shrub)) + 
+  geom_histogram(fill="white")
+p_histogram
+```
+
+What if we want to add the mean of each group? 
+```{r echo=TRUE}
+## Calculating the mean per group using Dplyr
+## we are naming the mean of each group mean_fl (as a short for mean fruit length)
+mu<-onstein %>% group_by(Shrub) %>% 
+  summarize(mean_fl=mean(fruit_length_average, na.rm=TRUE),
+            .groups = 'drop')
+mu
+```
+
+The little symbol ``%>%`` are called pipes in this package. Piping is an important tool for reproducibility. You never change your original data, you only reorder internally and put through a pipe line
+
+Ok, so what is happening with the dimension of mu? what do you notice?
+
+```{r echo=TRUE}
+dim(mu)
+ ### (there are NAs this will be annoying later on, so we are going to remove)
+mu<-mu[2:3,] ## discuss here how R reads tables and matrices as rows and columns!!!!
+# another option mu<- mu[-1,]
+```
+
+Okay so now finally add the mean to the groups and the histogram
+
+```{r echo=TRUE}
+p_histogram<-ggplot(onstein, aes(x=fruit_length_average, color=Shrub)) +
+  geom_histogram(fill="white", position="dodge")+
+  geom_vline(data=mu, aes(xintercept=mean_fl, color=Shrub),
+             linetype="dashed")+
+  theme(legend.position="top")
+p_histogram
+```
+What if I want my own colors? Let's check some cool options (aka coolors)
+
+```{r echo=TRUE}
+p_histogram<- p_histogram+scale_color_manual(values=c("hotpink", "#56B4E9")) #EXPLAIN
+p_histogram
+```
+
+But I want to make it publication quality! Let's make nice labels on the axes and clean the background
+
+```{r echo=TRUE}
+p_histogram<- p_histogram+xlab("Average Fruit Length")
+p_histogram
+p_histogram<-p_histogram+theme_classic()
+p_histogram
+```
+
+
+## Density plots
+
+What are density plots?- They are areas under the curve and later they will help us to decide about probability!
+
+Let's make a simple one!
+```{r echo=TRUE}
+p_density<-ggplot(onstein, aes(x=fruit_length_average)) + geom_density()
+p_density
+```
+
+Make it pretty colors
+```{r echo=TRUE}
+p_density<-ggplot(onstein, aes(x=fruit_length_average))+
+  geom_density(color="darkblue", fill="lightblue")
+p_density
+```
+
+Remember those pesky ``NAs`` what happens in density plots if we remove them. For that we will use the function ``subset()``.
+
+
+```{r echo=TRUE}
+p_density<-ggplot(data=subset(onstein,!is.na(fruit_length_average)), aes(x=fruit_length_average)) + geom_density()
+p_density
+```
+
+We will add the mean and remember to remove  ``NAs`` (do one with and one without NAs)
+```{r echo=TRUE}
+mean.fruit=mean(onstein$fruit_length_average,na.rm=TRUE)
+mean.fruit
+
+p_density<-p_density+ geom_vline(aes(xintercept=mean.fruit),
+              color="blue", linetype="dashed", size=1)
+p_density
+```
+
+
+Change density plot line colors by groups
+```{r echo=TRUE}
+p_density<-ggplot(onstein, aes(x=fruit_length_average, color=Shrub)) +
+  geom_density() + geom_vline(data=mu, aes(xintercept=mean_fl, color=Shrub),
+             linetype="dashed")
+p_density
+
+# Fill them in 
+p_density<-ggplot(onstein, aes(x=fruit_length_average, fill=Shrub)) + geom_density(alpha=0.4)+ geom_vline(data=mu, aes(xintercept=mean_fl, color=Shrub),  linetype="dashed")
+p_density
+```
+
+Adding my color scheme (tolk about coolors here)
+```{r echo=TRUE}
+p_density<-p_density+scale_fill_manual(values=c("hotpink", "#56B4E9"))
+p_density
+```
+
+Making it publication style
+```{r echo=TRUE}
+p_density<- p_density+ xlab("Average Fruit Length")+theme_classic()
+p_density
+```
+
+
+## Histogram with density plot
+```{r echo=TRUE}
+p_histdensity<-ggplot(onstein, aes(x=fruit_length_average)) + 
+  geom_histogram(aes(y=..density..), colour="black", fill="white")+
+  geom_density(alpha=.2, fill="hotpink") 
+p_histdensity
+```
+
+## Making Box and Whisker plots
+
+What are box and whisker plots? What are quartiles and interquartile difference??
+
+```{r echo=TRUE}
+ggplot(data=onstein, aes(x=fruit_length_average)) + 
+  geom_boxplot()
+```
+
+How do we make it vertical???
+```{r echo=TRUE}
+p_boxplot<-ggplot(data=onstein, aes(y=fruit_length_average)) + 
+  geom_boxplot()
+p_boxplot
+```
+
+How do we make it box and whisker plots by group??
+```{r echo=TRUE}
+p_boxplot<-ggplot(onstein, aes(y=fruit_length_average, color=Shrub)) +
+  geom_boxplot()
+p_boxplot
+```
+
+How do we change the color?
+```{r echo=TRUE}
+p_boxplot<-ggplot(onstein, aes(x=Shrub,y=fruit_length_average, color=Shrub)) +
+  geom_boxplot()+scale_color_manual(values=c("hotpink", "#56B4E9"))
+p_boxplot
+```
+
+How do we fill them in
+```{r echo=TRUE}
+p2<-ggplot(onstein, aes(x=Shrub,y=fruit_length_average, fill=Shrub)) +
+  geom_boxplot()
+
+p2+scale_fill_manual(values=c("hotpink", "#56B4E9"))
+```
+
+Eliminating those pesky NAs from plots
+```{r echo=TRUE}
+p_boxplot<-ggplot(data=subset(onstein, !is.na(fruit_length_average)), aes(x=Shrub,y=fruit_length_average, color=Shrub)) +
+  geom_boxplot()+scale_color_manual(values=c("hotpink", "#56B4E9"))
+p_boxplot
+```
+
+How do we add the mean?
+```{r echo=TRUE}
+p_boxplot<-p_boxplot + geom_point(data=mu,aes(x=Shrub,y=mean_fl),shape=23, size=4)
+p_boxplot
+```
+
+Adding good labels
+```{r echo=TRUE}
+p_boxplot<-p_boxplot+xlab("Shrub status")+ylab("Average fruit length")
+p_boxplot
+```
+
+How do we add all the sample?
+```{r echo=TRUE}
+p_boxplot<-p_boxplot + geom_jitter(shape=16, position=position_jitter(0.2))
+p_boxplot
+```
+
+All pretty and ready for publication
+```{r echo=TRUE}
+p_boxplot<-p_boxplot+theme_classic()
+p_boxplot
+```
+
+## Scatterplot
+
+When do we use scatterplots?
+We are going to use a new variable called ``Log_Fruit_width_avg`` but as the other one we have to transform it
+
+```{r echo=TRUE}
+head(onstein$Log_Fruit_width_avg)
+onstein$Log_Fruit_width_avg <- as.numeric(onstein$Log_Fruit_width_avg)
+fruit_width_average= exp(onstein$Log_Fruit_width_avg)
+
+#add it to your dataset
+onstein<-cbind(onstein, fruit_width_average)
+
+head(onstein)
+```
+
+Let's make our first basic scatterplot
+```{r echo=TRUE}
+ggplot(onstein, aes(x=fruit_length_average, y=fruit_width_average))+ geom_point()
+```
+What do we notice?
+
+Now let's do a regression (linear model) through it?
+```{r echo=TRUE}
+p_scatter<-ggplot(onstein, aes(x=fruit_length_average, y=fruit_width_average)) + 
+  geom_point()+
+  geom_smooth(method=lm)
+p_scatter
+```
+
+Are groups different?
+```{r echo=TRUE}
+p_scatter<-ggplot(onstein, aes(x=fruit_length_average, y=fruit_width_average, color=Shrub)) +geom_point() + 
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+p_scatter
+```
